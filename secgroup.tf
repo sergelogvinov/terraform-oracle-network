@@ -335,3 +335,32 @@ resource "oci_core_network_security_group_security_rule" "web_https" {
     }
   }
 }
+
+resource "oci_core_network_security_group" "peer" {
+  display_name   = "${var.project}-peer"
+  compartment_id = var.compartment
+  vcn_id         = oci_core_vcn.main.id
+  defined_tags   = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      defined_tags
+    ]
+  }
+}
+resource "oci_core_network_security_group_security_rule" "peer_ssh" {
+  for_each = toset(var.allowlist_admins)
+
+  network_security_group_id = oci_core_network_security_group.peer.id
+  protocol                  = "6"
+  direction                 = "INGRESS"
+  source                    = each.value
+  stateless                 = false
+
+  tcp_options {
+    destination_port_range {
+      min = 22
+      max = 22
+    }
+  }
+}

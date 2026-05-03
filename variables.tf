@@ -38,8 +38,9 @@ variable "network_peering" {
   type = map(any)
   default = {
     "peer-1" = {
-      ip    = "1.2.3.4"
-      cidrs = ["172.16.0.0/22"]
+      ip     = "1.2.3.4"
+      cidrs  = ["172.16.0.0/22"]
+      secret = "abcdef123456"
       # BGP parameters for the dynamic peering
       asn      = 12345
       p2p      = ["169.254.131.96/31", "fd00:169:254:131::/127"]

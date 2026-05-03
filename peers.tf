@@ -131,6 +131,9 @@ locals {
         ipsec  = oci_core_ipsec.link[peer].id
         tunnel = data.oci_core_ipsec_connection_tunnels.link[peer].ip_sec_connection_tunnels[i].id
 
+        static_routes = lookup(v, "cidrs", "")
+        shared_secret = lookup(v, "secret", null)
+
         p2p_side = lookup(v, "p2p_side", 0)
         p2p_v4   = local.ipsec_tunnels_p2p[peer].v4
         p2p_v6   = local.ipsec_tunnels_p2p[peer].v6
@@ -166,8 +169,9 @@ resource "oci_core_ipsec_connection_tunnel_management" "link" {
     oracle_interface_ipv6   = each.value.server_p2p_v6 != "" ? "${each.value.server_p2p_v6}/127" : null
   }
 
-  routing     = each.value.peer_asn > 0 ? "BGP" : "STATIC"
-  ike_version = "V2"
+  routing       = each.value.peer_asn > 0 ? "BGP" : "STATIC"
+  ike_version   = "V2"
+  shared_secret = each.value.shared_secret
 }
 
 resource "oci_core_drg_attachment_management" "ipsec_tunnels" {
