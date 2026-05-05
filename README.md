@@ -101,7 +101,7 @@ No modules.
 | <a name="input_compartment"></a> [compartment](#input\_compartment) | n/a | `any` | n/a | yes |
 | <a name="input_network_cidr"></a> [network\_cidr](#input\_network\_cidr) | Local subnet rfc1918 | `list(string)` | <pre>[<br/>  "172.16.0.0/16",<br/>  "fd60:172:16::/48"<br/>]</pre> | no |
 | <a name="input_network_name"></a> [network\_name](#input\_network\_name) | n/a | `string` | `"production"` | no |
-| <a name="input_network_peering"></a> [network\_peering](#input\_network\_peering) | n/a | `map(any)` | <pre>{<br/>  "peer-1": {<br/>    "asn": 12345,<br/>    "cidrs": [<br/>      "172.16.0.0/22"<br/>    ],<br/>    "ip": "1.2.3.4",<br/>    "p2p": [<br/>      "169.254.131.96/31",<br/>      "fd00:169:254:131::/127"<br/>    ],<br/>    "p2p_side": 1,<br/>    "secret": "abcdef123456"<br/>  }<br/>}</pre> | no |
+| <a name="input_network_peering"></a> [network\_peering](#input\_network\_peering) | n/a | `map(any)` | `{}` | no |
 | <a name="input_network_shift"></a> [network\_shift](#input\_network\_shift) | Network number shift | `number` | `4` | no |
 | <a name="input_project"></a> [project](#input\_project) | The name of the project | `string` | `"production"` | no |
 | <a name="input_region"></a> [region](#input\_region) | The OCI region where resources will be created | `string` | n/a | yes |

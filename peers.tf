@@ -183,7 +183,7 @@ resource "oci_core_ipsec_connection_tunnel_management" "link" {
 
   routing       = each.value.peer_asn > 0 ? "BGP" : "STATIC"
   ike_version   = "V2"
-  shared_secret = each.value.secret
+  shared_secret = each.value.secret != "" ? each.value.secret : null
 
   phase_one_details {
     lifetime = 28800
