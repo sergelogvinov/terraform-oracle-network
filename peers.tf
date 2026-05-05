@@ -76,42 +76,7 @@ resource "oci_core_drg_route_distribution_statement" "ipsec_tunnels" {
   }
 }
 
-resource "oci_core_cpe" "link" {
-  for_each       = { for name, v in var.network_peering : name => v if lookup(v, "ip", "") != "" }
-  compartment_id = var.compartment
-  display_name   = "${var.network_name}-link-${each.key}"
-  defined_tags   = var.tags
-
-  ip_address = each.value.ip
-
-  lifecycle {
-    ignore_changes = [
-      defined_tags
-    ]
-  }
-}
-
-resource "oci_core_ipsec" "link" {
-  for_each       = { for name, v in var.network_peering : name => v if lookup(v, "ip", "") != "" }
-  compartment_id = var.compartment
-  display_name   = "${var.network_name}-link-${each.key}"
-  defined_tags   = var.tags
-
-  cpe_id        = oci_core_cpe.link[each.key].id
-  drg_id        = oci_core_drg.link.id
-  static_routes = lookup(each.value, "cidrs", var.network_cidr)
-
-  lifecycle {
-    ignore_changes = [
-      defined_tags,
-    ]
-  }
-}
-
-data "oci_core_ipsec_connection_tunnels" "link" {
-  for_each = { for name, v in var.network_peering : name => v if lookup(v, "ip", "") != "" }
-  ipsec_id = oci_core_ipsec.link[each.key].id
-}
+# Peer rules
 
 locals {
   ipsec_tunnels_p2p = { for k in flatten([
@@ -124,42 +89,89 @@ locals {
 
   ipsec_tunnels = { for k in flatten([
     for peer, v in var.network_peering : [
+      for i, ip in v.ip : {
+        idx     = i
+        peer    = peer
+        name    = "${peer}-${i}"
+        secret  = lookup(v, "secret", "")
+        subnets = lookup(v, "cidrs", var.network_cidr)
+        pos     = lookup(v, "p2p_side", 0)
+
+        peer_asn = lookup(v, "asn", 0)
+        peer_v4  = length(split(".", ip)) > 1 ? ip : ""
+        peer_v6  = length(split(":", ip)) > 1 ? ip : ""
+      }
+    ] if length(lookup(v, "ip", [])) > 0
+  ]) : k.name => k }
+
+  ipsec_tunnels_links = { for k in flatten([
+    for link, v in local.ipsec_tunnels : [
       for i in range(2) : {
-        idx : i
-        name : "link-${peer}-${i}"
-        display_name : "${var.network_name}-link-${i}"
-        ipsec  = oci_core_ipsec.link[peer].id
-        tunnel = data.oci_core_ipsec_connection_tunnels.link[peer].ip_sec_connection_tunnels[i].id
+        idx    = i
+        peer   = v.peer
+        name   = "${link}-${i}"
+        link   = link
+        secret = v.secret
 
-        static_routes = lookup(v, "cidrs", "")
-        shared_secret = lookup(v, "secret", null)
+        peer_asn    = v.peer_asn
+        peer_v4     = v.peer_v4
+        peer_v6     = v.peer_v6
+        peer_p2p_v4 = local.ipsec_tunnels_p2p[v.peer].v4 != null ? cidrhost(cidrsubnet(local.ipsec_tunnels_p2p[v.peer].v4, 3, v.idx), 2 * i + 1 - v.pos) : ""
+        peer_p2p_v6 = local.ipsec_tunnels_p2p[v.peer].v6 != null ? cidrhost(cidrsubnet(local.ipsec_tunnels_p2p[v.peer].v6, 3, v.idx), 4 * i + 1 - v.pos) : ""
 
-        p2p_side = lookup(v, "p2p_side", 0)
-        p2p_v4   = local.ipsec_tunnels_p2p[peer].v4
-        p2p_v6   = local.ipsec_tunnels_p2p[peer].v6
-
-        server_v4     = data.oci_core_ipsec_connection_tunnels.link[peer].ip_sec_connection_tunnels[i].vpn_ip
-        server_v6     = ""
-        server_p2p_v4 = local.ipsec_tunnels_p2p[peer].v4 != null ? cidrhost(local.ipsec_tunnels_p2p[peer].v4, 2 * i + v.p2p_side) : ""
-        server_p2p_v6 = local.ipsec_tunnels_p2p[peer].v6 != null ? cidrhost(local.ipsec_tunnels_p2p[peer].v6, 2 * i + v.p2p_side) : ""
-        # server_asn    = oci_core_ipsec_connection_tunnel_management.link[k].bgp_session_info[0].oracle_bgp_asn
-
-        peer_v4     = length(split(".", v.ip)) > 1 ? v.ip : ""
-        peer_v6     = length(split(":", v.ip)) > 1 ? v.ip : ""
-        peer_p2p_v4 = local.ipsec_tunnels_p2p[peer].v4 != null ? cidrhost(local.ipsec_tunnels_p2p[peer].v4, 2 * i + 1 - v.p2p_side) : ""
-        peer_p2p_v6 = local.ipsec_tunnels_p2p[peer].v6 != null ? cidrhost(local.ipsec_tunnels_p2p[peer].v6, 2 * i + 1 - v.p2p_side) : ""
-        peer_asn    = lookup(v, "asn", 0)
-      } if try(var.capabilities.network_peer_enable, false)
+        server_p2p_v4 = local.ipsec_tunnels_p2p[v.peer].v4 != null ? cidrhost(cidrsubnet(local.ipsec_tunnels_p2p[v.peer].v4, 3, v.idx), 2 * i + v.pos) : ""
+        server_p2p_v6 = local.ipsec_tunnels_p2p[v.peer].v6 != null ? cidrhost(cidrsubnet(local.ipsec_tunnels_p2p[v.peer].v6, 3, v.idx), 4 * i + v.pos) : ""
+      }
     ]
   ]) : k.name => k }
 }
 
-resource "oci_core_ipsec_connection_tunnel_management" "link" {
-  for_each     = local.ipsec_tunnels
-  display_name = each.value.display_name
+# output "network_peering" {
+#   value = local.ipsec_tunnels_links
+# }
 
-  ipsec_id  = each.value.ipsec
-  tunnel_id = each.value.tunnel
+resource "oci_core_cpe" "link" {
+  for_each       = local.ipsec_tunnels
+  compartment_id = var.compartment
+  display_name   = "${var.network_name}-link-${each.key}"
+  defined_tags   = var.tags
+
+  ip_address = each.value.peer_v4 != "" ? each.value.peer_v4 : each.value.peer_v6
+
+  lifecycle {
+    ignore_changes = [
+      defined_tags
+    ]
+  }
+}
+
+resource "oci_core_ipsec" "link" {
+  for_each       = local.ipsec_tunnels
+  compartment_id = var.compartment
+  display_name   = "${var.network_name}-link-${each.key}"
+  defined_tags   = var.tags
+
+  cpe_id        = oci_core_cpe.link[each.key].id
+  drg_id        = oci_core_drg.link.id
+  static_routes = each.value.subnets
+
+  lifecycle {
+    ignore_changes = [
+      defined_tags,
+    ]
+  }
+}
+
+data "oci_core_ipsec_connection_tunnels" "link" {
+  for_each = local.ipsec_tunnels
+  ipsec_id = oci_core_ipsec.link[each.key].id
+}
+
+resource "oci_core_ipsec_connection_tunnel_management" "link" {
+  for_each     = local.ipsec_tunnels_links
+  display_name = "${var.network_name}-link-${each.key}"
+  ipsec_id     = oci_core_ipsec.link[each.value.link].id
+  tunnel_id    = data.oci_core_ipsec_connection_tunnels.link[each.value.link].ip_sec_connection_tunnels[each.value.idx].id
 
   bgp_session_info {
     customer_bgp_asn        = each.value.peer_asn > 0 ? each.value.peer_asn : null
@@ -171,16 +183,27 @@ resource "oci_core_ipsec_connection_tunnel_management" "link" {
 
   routing       = each.value.peer_asn > 0 ? "BGP" : "STATIC"
   ike_version   = "V2"
-  shared_secret = each.value.shared_secret
+  shared_secret = each.value.secret
+
+  phase_one_details {
+    lifetime = 28800
+  }
+  phase_two_details {
+    lifetime = 3600
+  }
 }
 
 resource "oci_core_drg_attachment_management" "ipsec_tunnels" {
-  for_each       = local.ipsec_tunnels
+  for_each       = local.ipsec_tunnels_links
   compartment_id = var.compartment
-  display_name   = each.value.display_name
+  display_name   = "${var.network_name}-link-${each.key}"
 
-  network_id         = each.value.tunnel
+  network_id         = oci_core_ipsec_connection_tunnel_management.link[each.key].id
   drg_id             = oci_core_drg.link.id
   drg_route_table_id = oci_core_drg_route_table.link.id
   attachment_type    = "IPSEC_TUNNEL"
+
+  lifecycle {
+    replace_triggered_by = [oci_core_ipsec_connection_tunnel_management.link[each.key].id]
+  }
 }

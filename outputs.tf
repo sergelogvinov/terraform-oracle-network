@@ -79,21 +79,21 @@ output "network_secgroup" {
 }
 
 output "network_peering" {
-  value = { for k, v in local.ipsec_tunnels : k => {
-    server = {
-      asn  = oci_core_ipsec_connection_tunnel_management.link[k].bgp_session_info[0].oracle_bgp_asn
-      ip4  = v.server_v4
-      ip6  = v.server_v6
-      p2p4 = v.server_p2p_v4
-      p2p6 = v.server_p2p_v6
-    }
-    client = {
-      asn  = v.peer_asn
-      ip4  = v.peer_v4
-      ip6  = v.peer_v6
-      p2p4 = v.peer_p2p_v4
-      p2p6 = v.peer_p2p_v6
-    }
-    }
-  }
+  value = { for k in flatten([
+    for name, v in local.ipsec_tunnels_links : [{
+      name = name
+      server = {
+        asn  = oci_core_ipsec_connection_tunnel_management.link[name].bgp_session_info[0].oracle_bgp_asn
+        ip   = data.oci_core_ipsec_connection_tunnels.link[v.link].ip_sec_connection_tunnels[v.idx].vpn_ip
+        p2p4 = v.server_p2p_v4
+        p2p6 = v.server_p2p_v6
+      }
+      client = {
+        asn  = v.peer_asn
+        ip   = v.peer_v4 != "" ? v.peer_v4 : v.peer_v6
+        p2p4 = v.peer_p2p_v4
+        p2p6 = v.peer_p2p_v6
+      }
+    }]
+  ]) : k.name => k }
 }
