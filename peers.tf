@@ -189,7 +189,8 @@ resource "oci_core_ipsec_connection_tunnel_management" "link" {
     lifetime = 28800
   }
   phase_two_details {
-    lifetime = 3600
+    is_pfs_enabled = false
+    lifetime       = 3600
   }
 }
 
